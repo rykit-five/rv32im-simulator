@@ -45,6 +45,8 @@ mod tests {
         assert_eq!(reg.get_pc(), 0);
         reg.set_pc(1);
         assert_eq!(reg.get_pc(), 1);
+        reg.inc_pc();
+        assert_eq!(reg.get_pc(), 2);
 
         assert_eq!(reg.get_x(0), 0);
         reg.set_x(0, 1);

@@ -72,6 +72,81 @@ impl RTypeBitField {
         }
     }
 
+    // ADD performs the addition of rs1 and rs2. SUB performs the subtraction of rs2 from rs1. Overflows
+    // are ignored and the low XLEN bits of results are written to the destination rd.
+    pub fn behaviorADD(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t = f["rs1"] + f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+
+    pub fn behaviorSUB(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t = f["rs1"] - f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+    
+    // SLT and SLTU perform signed and unsigned compares respectively, writing 1 to rd if rs1 < rs2, 0 otherwise. Note,
+    // SLTU rd, x0, rs2 sets rd to 1 if rs2 is not equal to zero, otherwise sets rd to zero (assembler
+    // pseudoinstruction SNEZ rd, rs).
+    pub fn behaviorSLT(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        if f["rs1"] < f["rs2"] {
+            r.setReg(f["rd"], 1);
+        } else {
+            r.setReg(f["rd"], 0);
+        }
+    }
+    
+    pub fn behaviorSLTU(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        if (f["rs1"] as u32) < (f["rs2"] as u32) {
+            r.setReg(f["rd"], 1);
+        } else {
+            r.setReg(f["rd"], 0);
+        }
+    }
+    
+    // AND, OR, and XOR perform bitwise logical operations.
+    pub fn behaviorAND(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t = f["rs1"] & f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+    
+    pub fn behaviorOR(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t = f["rs1"] | f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+
+    pub fn behaviorXOR(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t = f["rs1"] ^ f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+
+    // SLL, SRL, and SRA perform logical left, logical right, and arithmetic right shifts on the value in
+    // register rs1 by the shift amount held in the lower 5 bits of register rs2.
+    pub fn behaviorSLL(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t = f["rs1"] << f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+        
+    pub fn behaviorSRL(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t = f["rs1"] >> f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+    
+    pub fn behaviorSRA(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let sign_bit: u32 = f["rs1"] >> 4;
+        let start_pos: u32 = if f["rs2"] >= 5 { 0 } else { 4 - f["rs2"] };
+        let end_pos: u32 = 32;
+        let mut vacated_upper_bits: u32 = 0;
+        for i in start_pos..end_pos {
+            vacated_upper_bits |= sign_bit << i;
+        }
+
+        let t = vacated_upper_bits | f["rs1"] >> f["rs2"];
+        r.setReg(f["rd"], t);
+    }
+
+    pub fn behavior(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        
+    }
 }
 
 impl Decode for RTypeBitField {
@@ -293,7 +368,7 @@ impl UTypeBitField {
     // format. AUIPC forms a 32-bit offset from the U-immediate, filling in the lowest 12 bits with zeros,
     // adds this offset to the address of the AUIPC inpub struction, then places the result in register rd.
     pub fn behaviorAUIPC(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
-        let t: u32 = f["imm_31_12"] << 12;
+        let mut t: u32 = f["imm_31_12"] << 12;
         t += r.getPC();
         r.setReg(f["rd"], t);
     }
@@ -386,7 +461,7 @@ impl CPU {
                 Opcode::LOAD_FP     => ,
                 Opcode::MISC_MEM    => ,
                 Opcode::OP_IMM      => {
-                    bf.ITYPE.readFields(inst, &mut f);
+                    bf.ITYPE.readFields(inst, &mut fields);
                     match f["funct3"] {
                         Funct3OpImm::ADDI       => bf.ITYPE.behaviorADDI(fields, &mut reg, &mut mem);
                         Funct3OpImm::SLTI       => bf.ITYPE.behaviorSLTI(fields, &mut reg, &mut mem);
@@ -413,7 +488,31 @@ impl CPU {
                 Opcode::STORE       => ,
                 Opcode::STORE_FP    => ,
                 Opcode::AMO         => ,
-                Opcode::OP          => ,
+                Opcode::OP          => {
+                    bf.RTYPE.readFields(inst, &mut fields)
+                    match f["funct3"] {
+                        Funct3Op::ADDSUB        => {
+                            match f["funct7"] {
+                                0b000_0000      => // ADD
+                                0b010_0000      => // SUB
+                                _               => ,
+                            }
+                        }
+                        Funct3Op::SLT           => 
+                        Funct3Op::SLTU          => 
+                        Funct3Op::XOR           => 
+                        Funct3Op::SRLSRA        => {
+                            match f["funct7"] {
+                                0b000_0000      => // SRL
+                                0b010_0000      => // SRA
+                                _               => ,
+                            }
+                        }
+                        Funct3Op::OR            => 
+                        Funct3Op::AND           => 
+                        _                       => ,
+                    }
+                },
                 Opcode::LUI         => ,
                     bf.UTYPE.readFields(inst, &mut fields);
                     bf.UTYPE.behaviorLUI(fields, r: &mut reg, &mut mem);

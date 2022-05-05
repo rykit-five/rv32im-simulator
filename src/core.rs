@@ -39,6 +39,17 @@ enum Funct3OpImm {
     ANDI        = 0b111,
 }
 
+#[derive(Debug)]
+enum Funct3Op {
+    ADDSUB      = 0b000,
+    SLL         = 0b001,
+    SLT         = 0b010,
+    SLTU        = 0b011,
+    XOR         = 0b100,
+    SRLSRA      = 0b101,
+    OR          = 0b110,
+    AND         = 0b111,
+}
 
 #[derive(Debug)]
 enum OpLabel {

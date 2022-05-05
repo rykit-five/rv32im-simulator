@@ -30,12 +30,15 @@ enum Opcode {
 #[derive(Debug)]
 enum Funct3OpImm {
     ADDI        = 0b000,
+    SLLI        = 0b001,
     SLTI        = 0b010,
     SLTIU       = 0b011,
     XORI        = 0b100,
+    SRLISRAI    = 0b101,
     ORI         = 0b110,
     ANDI        = 0b111,
 }
+
 
 #[derive(Debug)]
 enum OpLabel {

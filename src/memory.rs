@@ -6,7 +6,7 @@ pub struct Memory {
 impl Memory {
     pub fn new() -> Memory {
         Memory {
-            mem: Default::default(),  // ゼロ初期化
+            mem: [0; 256],  // ゼロ初期化
         }
     }
 

@@ -9,7 +9,7 @@ trait Decode {
 }
 
 #[derive(Debug)]
-struct BitFields {
+pub struct BitFields {
     OPCODE  : OpcodeBitField,
     RTYPE   : RTypeBitField,
     ITYPE   : ITypeBitField,
@@ -20,7 +20,7 @@ struct BitFields {
 }
 
 impl BitFields {
-    fn new() -> BitFields {
+    pub fn new() -> BitFields {
         BitFields {
             OPCODE  : OpcodeBitField::new(),
             RTYPE   : RTypeBitField::new(),
@@ -34,12 +34,12 @@ impl BitFields {
 }
 
 #[derive(Debug)]
-struct OpcodeBitField {
+pub struct OpcodeBitField {
     opcode      : u32,
 }
 
 impl OpcodeBitField {
-    fn new() -> OpcodeBitField {
+    pub fn new() -> OpcodeBitField {
         OpcodeBitField {
             opcode      : 0x0000_007F,
         }
@@ -53,7 +53,7 @@ impl Decode for OpcodeBitField {
 }
 
 #[derive(Debug)]
-struct RTypeBitField {
+pub struct RTypeBitField {
     rd          : u32,
     funct3      : u32,
     rs1         : u32,
@@ -62,7 +62,7 @@ struct RTypeBitField {
 }
 
 impl RTypeBitField {
-    fn new() -> RTypeBitField {
+    pub fn new() -> RTypeBitField {
         RTypeBitField {
             rd          : 0x0000_0F80,
             funct3      : 0x0000_7000,
@@ -85,27 +85,31 @@ impl Decode for RTypeBitField {
 }
 
 #[derive(Debug)]
-struct ITypeBitField {
+pub struct ITypeBitField {
     rd          : u32,
     funct3      : u32,
     rs1         : u32,
     imm_11_0    : u32,
+    imm_4_0     : u32,
+    imm_11_5    : u32,
 }
 
 impl ITypeBitField {
-    fn new() -> ITypeBitField {
+    pub fn new() -> ITypeBitField {
         ITypeBitField {
             rd          : 0x0000_0F80,
             funct3      : 0x0000_7000,
             rs1         : 0x000F_8000,
             imm_11_0    : 0xFFF0_0000,
+            imm_4_0     : 0x01F0_0000,
+            imm_11_5    : 0xFE00_0000,
         }
     }
 
     // ADDI adds the sign-extended 12-bit immediate to register rs1. Arithmetic overflow is ignored and
     // the result is simply the low XLEN bits of the result. ADDI rd, rs1, 0 is used to implement the MV
-    // rd, rs1 assembler pseudoinstruction.
-    fn behaviorADDI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    // rd, rs1 assembler pseudoinpub struction.
+    pub fn behaviorADDI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         let t = f["imm_11_0"] + r.getReg(f["rs1"]);
         r.setReg(f["rd"], t);
     }
@@ -114,8 +118,8 @@ impl ITypeBitField {
     // immediate when both are treated as signed numbers, else 0 is written to rd. SLTIU is
     // similar but compares the values as unsigned numbers (i.e., the immediate is first sign-extended to
     // XLEN bits then treated as an unsigned number). Note, SLTIU rd, rs1, 1 sets rd to 1 if rs1 equals
-    // zero, otherwise sets rd to 0 (assembler pseudoinstruction SEQZ rd, rs).
-    fn behaviorSLTI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    // zero, otherwise sets rd to 0 (assembler pseudoinpub struction SEQZ rd, rs).
+    pub fn behaviorSLTI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         if f["rs1"] < f["imm_11_0"] {
             r.setReg(f["rd"], 1);
         } else {
@@ -123,7 +127,7 @@ impl ITypeBitField {
         }
     }
 
-    fn behaviorSLTIU(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    pub fn behaviorSLTIU(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         // todo: unsigned intに直したい
         if (f["rs1"] as i32) < (f["imm_11_0"] as i32) {
             r.setReg(f["rd"], 1);
@@ -134,23 +138,52 @@ impl ITypeBitField {
 
     // ANDI, ORI, XORI are logical operations that perform bitwise AND, OR, and XOR on register rs1
     // and the sign-extended 12-bit immediate and place the result in rd. Note, XORI rd, rs1, -1 performs
-    // a bitwise logical inversion of register rs1 (assembler pseudoinstruction NOT rd, rs).
-    fn behaviorXORI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    // a bitwise logical inversion of register rs1 (assembler pseudoinpub struction NOT rd, rs).
+    pub fn behaviorXORI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         let t: u32 = f["imm_11_0"] ^ r.getReg(f["rs1"]);
         r.setReg(f["rd"], t);
     }
 
-    fn behaviorORI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    pub fn behaviorORI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         let t: u32 = f["imm_11_0"] | r.getReg(f["rs1"]);
         r.setReg(f["rd"], t);
     }
 
-    fn behaviorANDI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    pub fn behaviorANDI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         let t: u32 = f["imm_11_0"] & r.getReg(f["rs1"]);
         r.setReg(f["rd"], t);
     }
+    
+    // Shifts by a constant are encoded as a specialization of the I-type format. The operand to be shifted
+    // is in rs1, and the shift amount is encoded in the lower 5 bits of the I-immediate field. The right
+    // shift type is encoded in bit 30. SLLI is a logical left shift (zeros are shifted into the lower bits);
+    // SRLI is a logical right shift (zeros are shifted into the upper bits); and SRAI is an arithmetic right
+    // shift (the original sign bit is copied into the vacated upper bits).
+    pub fn behaviorSLLI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t: u32 = f["rs1"] << f["imm_4_0"];
+        r.setReg(f["rd"], t);
+    }
+    
+    pub fn behaviorSRLI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let t: u32 = f["rs1"] >> f["imm_4_0"];
+        r.setReg(f["rd"], t);
+    }
 
-    fn behavior(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    // todo: 動作検証が必須
+    pub fn behaviorSRAI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+        let sign_bit: u32 = f["rs1"] >> 4;
+        let start_pos: u32 = if f["imm_4_0"] >= 5 { 0 } else { 4 - f["imm_4_0"] };
+        let end_pos: u32 = 32;
+        let mut vacated_upper_bits: u32 = 0;
+        for i in start_pos..end_pos {
+            vacated_upper_bits |= sign_bit << i;
+        }
+
+        let t: u32 = vacated_upper_bits | f["rs1"] >> f["imm_4_0"];
+        r.setReg(f["rd"], t);
+    }
+
+    pub fn behavior(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         
     }
 }
@@ -161,11 +194,13 @@ impl Decode for ITypeBitField {
         fields.insert("funct3", inst & self.funct3);
         fields.insert("rs1", inst & self.rs1);
         fields.insert("imm_11_0", inst & self.imm_11_0);
+        fields.insert("imm_4_0", inst & self.imm_4_0);
+        fields.insert("imm_11_5", inst & self.imm_11_5);
     }
 }
 
 #[derive(Debug)]
-struct STypeBitField {
+pub struct STypeBitField {
     imm_4_0     : u32,
     funct3      : u32,
     rs1         : u32,
@@ -174,7 +209,7 @@ struct STypeBitField {
 }
 
 impl STypeBitField {
-    fn new() -> STypeBitField {
+    pub fn new() -> STypeBitField {
         STypeBitField {
             imm_4_0     : 0x0000_0F80,
             funct3      : 0x0000_7000,
@@ -196,7 +231,7 @@ impl Decode for STypeBitField {
 }
 
 #[derive(Debug)]
-struct BTypeBitField {
+pub struct BTypeBitField {
     imm_11      : u32,
     imm_4_1     : u32,
     funct3      : u32,
@@ -207,7 +242,7 @@ struct BTypeBitField {
 }
 
 impl BTypeBitField {
-    fn new() -> BTypeBitField {
+    pub fn new() -> BTypeBitField {
         BTypeBitField {
             imm_11      : 0x0000_0080,
             imm_4_1     : 0x0000_0F00,
@@ -233,13 +268,13 @@ impl Decode for BTypeBitField {
 }
 
 #[derive(Debug)]
-struct UTypeBitField {
+pub struct UTypeBitField {
     rd          : u32,
     imm_31_12   : u32,
 }
 
 impl UTypeBitField {
-    fn new() -> UTypeBitField {
+    pub fn new() -> UTypeBitField {
         UTypeBitField {
             rd          : 0x0000_0F80,
             imm_31_12   : 0xFFFF_F000,
@@ -249,15 +284,15 @@ impl UTypeBitField {
     // LUI (load upper immediate) is used to build 32-bit constants and uses the U-type format. LUI
     // places the 32-bit U-immediate value into the destination register rd, filling in the lowest 12 bits
     // with zeros.
-    fn behaviorLUI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    pub fn behaviorLUI(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         let t: u32 = f["imm_31_12"] << 12;
         r.setReg(f["rd"], t);
     }
 
     // AUIPC (add upper immediate to pc) is used to build pc-relative addresses and uses the U-type
     // format. AUIPC forms a 32-bit offset from the U-immediate, filling in the lowest 12 bits with zeros,
-    // adds this offset to the address of the AUIPC instruction, then places the result in register rd.
-    fn behaviorAUIPC(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
+    // adds this offset to the address of the AUIPC inpub struction, then places the result in register rd.
+    pub fn behaviorAUIPC(&self, f: HashMap<&str, u32>, r: &mut register::Register, m: &mut memory::Memory) {
         let t: u32 = f["imm_31_12"] << 12;
         t += r.getPC();
         r.setReg(f["rd"], t);
@@ -272,7 +307,7 @@ impl Decode for UTypeBitField {
 }
 
 #[derive(Debug)]
-struct JTypeBitField {
+pub struct JTypeBitField {
     rd          : u32,
     imm_19_12   : u32,
     imm_11      : u32,
@@ -281,7 +316,7 @@ struct JTypeBitField {
 }
 
 impl JTypeBitField {
-    fn new() -> JTypeBitField {
+    pub fn new() -> JTypeBitField {
         JTypeBitField {
             rd          : 0x0000_0F80,
             imm_19_12   : 0x0000_F000,
@@ -303,7 +338,7 @@ impl Decode for JTypeBitField {
 }
 
 #[derive(Debug)]
-struct CPU {
+pub struct CPU {
     pc: usize,
     reg: [u32; 32],
     ram: [u32; 256],
@@ -341,24 +376,32 @@ impl CPU {
 
         loop {
             let inst: u32 = self.rom[self.pc] as u32;
-            let mut fields: HashMap = HashMap::new();
+            let mut fields: HashMap<&str, u32> = HashMap::new();
 
             bf.OPCODE.readFields(inst, &mut fields);
 
             // OpcodeからTypeを特定して他フィールドを読み出し
-            match fields.get("opcode") {
+            match fields["opcode"] {
                 Opcode::LOAD        => ,
                 Opcode::LOAD_FP     => ,
                 Opcode::MISC_MEM    => ,
                 Opcode::OP_IMM      => {
-                    bf.RTYPE.readFields(inst, &mut fields);
-                    match fields.get("funct3") {
-                        Funct3OpImm::ADDI       => ,
-                        Funct3OpImm::SLTI       => ,
-                        Funct3OpImm::SLTIU      => ,
-                        Funct3OpImm::XORI       => ,
-                        Funct3OpImm::ORI        => ,
-                        Funct3OpImm::ANDI       => ,
+                    bf.ITYPE.readFields(inst, &mut f);
+                    match f["funct3"] {
+                        Funct3OpImm::ADDI       => bf.ITYPE.behaviorADDI(fields, &mut reg, &mut mem);
+                        Funct3OpImm::SLTI       => bf.ITYPE.behaviorSLTI(fields, &mut reg, &mut mem);
+                        Funct3OpImm::SLLI       => bf.ITYPE.behaviorSLLI(fields, &mut reg, &mut mem);
+                        Funct3OpImm::SLTIU      => bf.ITYPE.behaviorSLTIU(fields, &mut reg, &mut mem);
+                        Funct3OpImm::XORI       => bf.ITYPE.behaviorXORI(fields, &mut reg, &mut mem);
+                        Funct3OpImm::SRLISRAI   => {
+                            match f["imm_11_5"] {
+                                0b000_0000      => bf.ITYPE.behaviorSRLI(fields, &mut reg, &mut mem);
+                                0b000_0001      => bf.ITYPE.behaviorSRAI(fields, &mut reg, &mut mem);
+                                _               => ,
+                            }
+                        }
+                        Funct3OpImm::ORI        => bf.ITYPE.behaviorORI(fields, &mut reg, &mut mem);
+                        Funct3OpImm::ANDI       => bf.ITYPE.behaviorANDI(fields, &mut reg, &mut mem);
                         _                       => ,
                     }
                 },

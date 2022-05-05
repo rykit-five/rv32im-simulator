@@ -1,3 +1,4 @@
+// todo: 実際のアセンブリの表記()と論理レジスタ番号を対応づけ
 #[derive(Debug)]
 enum Reg {
     ZERO,

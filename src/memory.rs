@@ -1,20 +1,26 @@
 #[derive(Debug)]
 pub struct Memory {
-    mem: [i32; 256],
+    ram: [u32; 256],
+    rom: [u32; 256],
 }
 
 impl Memory {
     pub fn new() -> Memory {
         Memory {
-            mem: [0; 256],  // ゼロ初期化
+            ram: [0; 256],  // ゼロ初期化
+            rom: [0; 256],
         }
     }
 
-    pub fn readMem(&self, addr: u32) -> i32 {
-        return self.mem[addr as usize];
+    pub fn readRAM(&self, addr: u32) -> u32 {
+        return self.ram[addr as usize];
     }
 
-    pub fn writeMem(&mut self, addr: u32, imm: i32) {  // memo: 多分mutを付けないと書き込みできない
-        self.mem[addr as usize] = imm;
+    pub fn writeRAM(&mut self, addr: u32, val: u32) {
+        self.ram[addr as usize] = val;
+    }
+
+    pub fn readROM(&self, addr: u32) -> u32 {
+        return self.rom[addr as usize];
     }
 }

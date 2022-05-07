@@ -1,5 +1,6 @@
 /src/tmp.rs
 /target
+/.idea
 
 Cargo.lock
 Cargo.toml

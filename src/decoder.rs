@@ -1,7 +1,13 @@
-pub mod register;
-pub mod memory;
+use crate::memory::Memory;
+use crate::register::Register;
+use crate::bittools::{
+    signExtend,
+    zeroExtend,
+}
 
-use std::arch::aarch64::ST;
+// pub mod register;
+// pub mod memory;
+// pub mod bittools;
 
 // #[derive(Debug)]
 // pub struct BitFields {
@@ -307,8 +313,55 @@ impl ITypeDecoder {
         r.setReg(self.rd, t1);
     }
 
-    pub fn behavior(&self, r: &mut register::Register, m: &mut memory::Memory) {
+    // The indirect jump instruction JALR (jump and link register) uses the I-type encoding. The
+    // target address is obtained by adding the sign-extended 12-bit I-immediate to the register
+    // rs1, then setting the least-significant bit of the result to zero. The address of the
+    // instruction following the jump (pc+4) is written to register rd. Register x0 can be used as
+    // the destination if the result is not required.
+    pub fn behaviorJALR(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        r.setReg(self.rd, r.getPC + 4);
+        let t1: u32 = bittools::signExtend(self.imm_11_0, 12) + r.getReg(self.rs1);
+        let t2: u32 = (t1 >> 1) << 1;
+        r.setReg(self.rd, t2);
+    }
 
+    // Load and store instructions transfer a value between the registers and memory. Loads are
+    // encoded in the I-type format and stores are S-type. The effective address is obtained by
+    // adding register rs1 to the sign-extended 12-bit offset. Loads copy a value from memory to
+    // register rd. Stores copy the value in register rs2 to memory.
+
+    // The LW instruction loads a 32-bit value from memory into rd. LH loads a 16-bit value from
+    // memory, then sign-extends to 32-bits before storing in rd. LHU loads a 16-bit value from
+    // memory but then zero extends to 32-bits before storing in rd. LB and LBU are defined
+    // analogously for 8-bit values.
+    pub fn behaviorLW(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = r.getReg(self.rs1) + bitools::signExtend(self.imm_11_0, 12);
+        let t2: u32 = m.readRAM(t1);
+        r.setReg(self.rd, t2);
+    }
+
+    pub fn behaviorLH(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = r.getReg(self.rs1) + bitools::signExtend(self.imm_11_0, 12);
+        let t2: u16 = bittools::signExtend(m.readRAM16Bit(t1));
+        r.setReg(self.rd, t2 as u32);
+    }
+
+    pub fn behaviorLHU(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = r.getReg(self.rs1) + bitools::signExtend(self.imm_11_0, 12);
+        let t2: u16 = bittools::zeroExtend(m.readRAM16Bit(t1));
+        r.setReg(self.rd, t2 as u32);
+    }
+
+    pub fn behaviorLB(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = r.getReg(self.rs1) + bitools::signExtend(self.imm_11_0, 12);
+        let t2: u8 = bittools::signExtend(m.readRAM8Bit(t1));
+        r.setReg(self.rd, t2 as u32);
+    }
+
+    pub fn behaviorLBU(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = r.getReg(self.rs1) + bitools::signExtend(self.imm_11_0, 12);
+        let t2: u8 = bittools::zeroExtend(m.readRAM8Bit(t1));
+        r.setReg(self.rd, t2 as u32);
     }
 
 }
@@ -357,6 +410,35 @@ impl STypeDecoder {
         }
     }
 
+    // Load and store instructions transfer a value between the registers and memory. Loads are
+    // encoded in the I-type format and stores are S-type. The effective address is obtained by
+    // adding register rs1 to the sign-extended 12-bit offset. Loads copy a value from memory to
+    // register rd. Stores copy the value in register rs2 to memory.
+
+    // The SW, SH, and SB instructions store 32-bit, 16-bit, and 8-bit values from the low bits of
+    // register rs2 to memory.
+    pub fn behaviorSW(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_11_5 << 4 | self.imm_4_0;
+        let t2: u32 = r.getReg(self.rs1) + bitools::signExtend(t1, 12);
+        m.writeRAM(t2, r.getReg(self.rs2));
+    }
+
+    pub fn behaviorSH(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_11_5 << 4 | self.imm_4_0;
+        let t2: u32 = r.getReg(self.rs1) + bitools::signExtend(t1, 12);
+        m.writeRAM(t2, r.getReg(self.rs2) as u16);
+    }
+
+    pub fn behaviorSB(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_11_5 << 4 | self.imm_4_0;
+        let t2: u32 = r.getReg(self.rs1) + bitools::signExtend(t1, 12);
+        m.writeRAM(t2, r.getReg(self.rs2) as u8);
+    }
+
+    pub fn behavior(&self, r: &mut register::Register, m: &mut memory::Memory) {
+
+    }
+
 }
 
 // B-Type
@@ -383,6 +465,85 @@ impl BTypeBitFields {
             imm_10_5    : 0x7C00_0000,
             imm_12      : 0x8000_0000,
         }
+    }
+
+    // All branch instructions use the B-type instruction format. The 12-bit B-immediate encodes
+    // signed offsets in multiples of 2 bytes. The offset is sign-extended and added to the address
+    // of the branch instruction to give the target address. The conditional branch range is ±4 KiB.
+    // Branch instructions compare two registers. BEQ and BNE take the branch if registers rs1 and
+    // rs2 are equal or unequal respectively. BLT and BLTU take the branch if rs1 is less than rs2,
+    // using signed and unsigned comparison respectively. BGE and BGEU take the branch if rs1 is
+    // greater than or equal to rs2, using signed and unsigned comparison respectively. Note, BGT,
+    // BGTU, BLE, and BLEU can be synthesized by reversing the operands to BLT, BLTU, BGE, and BGEU,
+    // respectively.
+    pub fn behaviorBEQ(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_12 << 11
+            | self.imm_11 << 10
+            | self.imm_10_5 << 4
+            | self.imm_4_1;
+        let t2: u32 = bittools::signExtend(t1, 12) + r.getPC();
+        if r.getReg(self.rs1) == r.getReg(self.rs2) {
+            r.setPC(t2);
+        }
+    }
+
+    pub fn behaviorBNE(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_12 << 11
+            | self.imm_11 << 10
+            | self.imm_10_5 << 4
+            | self.imm_4_1;
+        let t2: u32 = bittools::signExtend(t1, 12) + r.getPC();
+        if r.getReg(self.rs1) != r.getReg(self.rs2) {
+            r.setPC(t2);
+        }
+    }
+
+    pub fn behaviorBLT(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_12 << 11
+            | self.imm_11 << 10
+            | self.imm_10_5 << 4
+            | self.imm_4_1;
+        let t2: u32 = bittools::signExtend(t1, 12) + r.getPC();
+        if (r.getReg(self.rs1) as i32) < (r.getReg(self.rs2) as i32) {
+            r.setPC(t2);
+        }
+    }
+
+    pub fn behaviorBLTU(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_12 << 11
+            | self.imm_11 << 10
+            | self.imm_10_5 << 4
+            | self.imm_4_1;
+        let t2: u32 = bittools::signExtend(t1, 12) + r.getPC();
+        if r.getReg(self.rs1) < r.getReg(self.rs2) {
+            r.setPC(t2);
+        }
+    }
+
+    pub fn behaviorBGE(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_12 << 11
+            | self.imm_11 << 10
+            | self.imm_10_5 << 4
+            | self.imm_4_1;
+        let t2: u32 = bittools::signExtend(t1, 12) + r.getPC();
+        if (r.getReg(self.rs1) as i32) >= (r.getReg(self.rs2) as i32) {
+            r.setPC(t2);
+        }
+    }
+
+    pub fn behaviorBGEU(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        let t1: u32 = self.imm_12 << 11
+            | self.imm_11 << 10
+            | self.imm_10_5 << 4
+            | self.imm_4_1;
+        let t2: u32 = bittools::signExtend(t1, 12) + r.getPC();
+        if r.getReg(self.rs1) >= r.getReg(self.rs2) {
+            r.setPC(t2);
+        }
+    }
+
+    pub fn behavior(&self, r: &mut register::Register, m: &mut memory::Memory) {
+
     }
 }
 
@@ -506,6 +667,27 @@ impl JTypeDecoder {
             imm_20      : (inst & bf.imm_20) >> 31,
         }
     }
+
+    // The jump and link (JAL) instruction uses the J-type format, where the J-immediate encodes a
+    // signed offset in multiples of 2 bytes. The offset is sign-extended and added to the address
+    // of the jump instruction to form the jump target address. Jumps can therefore target a ±1 MiB
+    // range. JAL stores the address of the instruction following the jump (pc+4) into register rd.
+    // The standard software calling convention uses x1 as the return address register and x5 as an
+    // alternate link register.
+    pub fn behaviorJAL(&self, r: &mut register::Register, m: &mut memory::Memory) {
+        r.setReg(self.rd, r.getPC + 4);
+        let t1: u32 = (self.imm_20 << 19
+            | self.imm_19_12 << 11
+            | self.imm_11 << 10
+            | self.imm_10_1);
+        let t2: u32 = bittools::signExtend(t1, 20);
+        // todo: u32で計算 -> 常に前方アドレスに飛ぶ前提
+        r.setPC(r.getPC + t2);
+    }
+
+    pub fn behavior(&self, r: &mut register::Register, m: &mut memory::Memory) {
+
+    }
 }
 
 #[cfg(test)]
@@ -513,9 +695,9 @@ mod tests {
     use crate::decoder::*;
 
     #[test]
-    fn testJTypeFieldsInitialize() {
+    fn testJTypeDecoder() {
         let inst: u32 = 0x7434_8A7E;
-        let mut j = JTypeDecoder::new(inst);
+        let mut jtype_dec: JTypeDecoder = JTypeDecoder::new(inst);
         // assert_eq!();
     }
 }

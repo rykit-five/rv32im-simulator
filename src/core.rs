@@ -1,6 +1,8 @@
+use std::convert::TryFrom;
+
 // c.f., Table 26.1: RISC-V base opcode map
 #[derive(Debug)]
-enum Opcode {
+pub enum Opcode {
     LOAD        = 0b0000011,
     LOAD_FP     = 0b0000111,
     MISC_MEM    = 0b0001111,
@@ -27,8 +29,42 @@ enum Opcode {
     SYSTEM      = 0b1110011,
 }
 
+impl TryFrom<u32> for Opcode {
+    type Error = ();
+
+    fn try_from(val: u32) -> Result<Self, Self::Error> {
+        match val {
+            val if val == Opcode::LOAD as u32       => Ok(Opcode::LOAD),
+            val if val == Opcode::LOAD_FP as u32    => Ok(Opcode::LOAD_FP),
+            val if val == Opcode::MISC_MEM as u32   => Ok(Opcode::MISC_MEM),
+            val if val == Opcode::OP_IMM as u32     => Ok(Opcode::OP_IMM),
+            val if val == Opcode::AUIPC as u32      => Ok(Opcode::AUIPC),
+            val if val == Opcode::OP_IMM_32 as u32  => Ok(Opcode::OP_IMM_32),
+
+            val if val == Opcode::STORE as u32      => Ok(Opcode::STORE),
+            val if val == Opcode::STORE_FP as u32   => Ok(Opcode::STORE_FP),
+            val if val == Opcode::AMO as u32        => Ok(Opcode::AMO),
+            val if val == Opcode::OP as u32         => Ok(Opcode::OP),
+            val if val == Opcode::LUI as u32        => Ok(Opcode::LUI),
+            val if val == Opcode::OP_32 as u32      => Ok(Opcode::OP_32),
+
+            val if val == Opcode::MADD as u32       => Ok(Opcode::MADD),
+            val if val == Opcode::MSUB as u32       => Ok(Opcode::MSUB),
+            val if val == Opcode::MMSUB as u32      => Ok(Opcode::MMSUB),
+            val if val == Opcode::NMADD as u32      => Ok(Opcode::NMADD),
+            val if val == Opcode::OP_FP as u32      => Ok(Opcode::OP_FP),
+
+            val if val == Opcode::BRANCH as u32     => Ok(Opcode::BRANCH),
+            val if val == Opcode::JALR as u32       => Ok(Opcode::JALR),
+            val if val == Opcode::JAL as u32        => Ok(Opcode::JAL),
+            val if val == Opcode::SYSTEM as u32     => Ok(Opcode::SYSTEM),
+            _                                       => Err(()),
+        }
+    }
+}
+
 #[derive(Debug)]
-enum Funct3OpImm {
+pub enum Funct3OpImm {
     ADDI        = 0b000,
     SLLI        = 0b001,
     SLTI        = 0b010,
@@ -39,8 +75,26 @@ enum Funct3OpImm {
     ANDI        = 0b111,
 }
 
+impl TryFrom<u32> for Funct3OpImm {
+    type Error = ();
+
+    fn try_from(val: u32) -> Result<Self, Self::Error> {
+        match val {
+            val if val == Funct3OpImm::ADDI as u32      => Ok(Funct3OpImm::ADDI),
+            val if val == Funct3OpImm::SLLI as u32      => Ok(Funct3OpImm::SLLI),
+            val if val == Funct3OpImm::SLTI as u32      => Ok(Funct3OpImm::SLTI),
+            val if val == Funct3OpImm::SLTIU as u32     => Ok(Funct3OpImm::SLTIU),
+            val if val == Funct3OpImm::XORI as u32      => Ok(Funct3OpImm::XORI),
+            val if val == Funct3OpImm::SRLISRAI as u32  => Ok(Funct3OpImm::SRLISRAI),
+            val if val == Funct3OpImm::ORI as u32       => Ok(Funct3OpImm::ORI),
+            val if val == Funct3OpImm::ANDI as u32      => Ok(Funct3OpImm::ANDI), 
+            _                                           => Err(()),
+        }
+    }
+}
+
 #[derive(Debug)]
-enum Funct3Op {
+pub enum Funct3Op {
     ADDSUB      = 0b000,
     SLL         = 0b001,
     SLT         = 0b010,
@@ -52,13 +106,54 @@ enum Funct3Op {
 }
 
 #[derive(Debug)]
-enum OpLabel {
+pub enum Funct3Branch {
+    BEQ         = 0b000,
+    BNE         = 0b001,
+    BLT         = 0b100,
+    BGE         = 0b101,
+    BLTU        = 0b110,
+    BGEU        = 0b111,
+}
+
+#[derive(Debug)]
+pub enum Funct3Load {
+    LB          = 0b000,
+    LH          = 0b001,
+    LW          = 0b010,
+    LBU         = 0b100,
+    LHU         = 0b101,
+}
+
+impl TryFrom<u32> for Funct3Load {
+    type Error = ();
+
+    fn try_from(val: u32) -> Result<Self, Self::Error> {
+        match val {
+            val if val == Funct3Load::LB as u32         => Ok(Funct3Load::LB),
+            val if val == Funct3Load::LH as u32         => Ok(Funct3Load::LH),
+            val if val == Funct3Load::LW as u32         => Ok(Funct3Load::LW),
+            val if val == Funct3Load::LBU as u32        => Ok(Funct3Load::LBU),
+            val if val == Funct3Load::LHU as u32        => Ok(Funct3Load::LHU),
+            _                                           => Err(()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Funct3STORE {
+    SB          = 0b000,
+    SH          = 0b001,
+    SW          = 0b010,
+}
+
+#[derive(Debug)]
+pub enum OpLabel {
     
 }
 
 /*
 #[derive(Debug)]
-enum Funct3 {
+pub enum Funct3 {
     JALR        = 0b000,
 
     BEQ         = 0b000,
@@ -107,7 +202,7 @@ enum Funct3 {
 }
 
 #[derive(Debug)]
-enum Funct5 {
+pub enum Funct5 {
 
 }
 */
